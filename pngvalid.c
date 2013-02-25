@@ -9246,7 +9246,7 @@ static PNG_CONST color_encoding test_encodings[] =
 };
 
 /* main program */
-int main(int argc, PNG_CONST char **argv)
+int sans_main(int argc, PNG_CONST char **argv)
 {
    volatile int summary = 1;  /* Print the error summary at the end */
    volatile int memstats = 0; /* Print memory statistics at the end */
