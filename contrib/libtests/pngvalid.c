@@ -1,8 +1,8 @@
 
 /* pngvalid.c - validate libpng by constructing then reading png files.
  *
- * Last changed in libpng 1.5.6 [November 3, 2011]
- * Copyright (c) 2011 Glenn Randers-Pehrson
+ * Last changed in libpng 1.5.8 [February 1, 2012]
+ * Copyright (c) 2012 Glenn Randers-Pehrson
  * Written by John Cunningham Bowler
  *
  * This code is released under the libpng license.
@@ -20,10 +20,26 @@
  */
 
 #define _POSIX_SOURCE 1
+#define _ISOC99_SOURCE 1 /* For floating point */
+#define _GNU_SOURCE 1 /* For the floating point exception extension */
 
-#include "png.h"
+#include <signal.h>
+
+#ifdef HAVE_FEENABLEEXCEPT
+#  include <fenv.h>
+#endif
+
+/* Define the following to use this test against your installed libpng, rather
+ * than the one being built here:
+ */
+#ifdef PNG_FREESTANDING_TESTS
+#  include <png.h>
+#else
+#  include "../../png.h"
+#endif
+
 #if PNG_LIBPNG_VER < 10500
-/* This delibarately lacks the PNG_CONST. */
+/* This deliberately lacks the PNG_CONST. */
 typedef png_byte *png_const_bytep;
 
 /* This is copied from 1.5.1 png.h: */
@@ -77,7 +93,7 @@ typedef png_byte *png_const_bytep;
 #endif
 
 /***************************** EXCEPTION HANDLING *****************************/
-#include "contrib/visupng/cexcept.h"
+#include "../visupng/cexcept.h"
 
 #ifdef __cplusplus
 #  define this not_the_cpp_this
@@ -228,7 +244,7 @@ random_choice(void)
 
 #define COL_FROM_ID(id) ((png_byte)((id)& 0x7U))
 #define DEPTH_FROM_ID(id) ((png_byte)(((id) >> 3) & 0x1fU))
-#define PALETTE_FROM_ID(id) ((int)(((id) >> 8) & 0x1f))
+#define PALETTE_FROM_ID(id) (((id) >> 8) & 0x1f)
 #define INTERLACE_FROM_ID(id) ((int)(((id) >> 13) & 0x3))
 #define DO_INTERLACE_FROM_ID(id) ((int)(((id)>>15) & 1))
 #define WIDTH_FROM_ID(id) (((id)>>16) & 0xff)
@@ -237,7 +253,7 @@ random_choice(void)
 /* Utility to construct a standard name for a standard image. */
 static size_t
 standard_name(char *buffer, size_t bufsize, size_t pos, png_byte colour_type,
-    int bit_depth, int npalette, int interlace_type,
+    int bit_depth, unsigned int npalette, int interlace_type,
     png_uint_32 w, png_uint_32 h, int do_interlace)
 {
    pos = safecat(buffer, bufsize, pos, colour_types[colour_type]);
@@ -299,10 +315,11 @@ standard_name_from_id(char *buffer, size_t bufsize, size_t pos, png_uint_32 id)
 /* The following defines the number of different palettes to generate for
  * each log bit depth of a colour type 3 standard image.
  */
-#define PALETTE_COUNT(bit_depth) ((bit_depth) > 4 ? 1 : 16)
+#define PALETTE_COUNT(bit_depth) ((bit_depth) > 4 ? 1U : 16U)
 
 static int
-next_format(png_bytep colour_type, png_bytep bit_depth, int* palette_number)
+next_format(png_bytep colour_type, png_bytep bit_depth,
+   unsigned int* palette_number)
 {
    if (*bit_depth == 0)
    {
@@ -831,6 +848,19 @@ store_log(png_store* ps, png_structp pp, png_const_charp message, int is_error)
       store_verbose(ps, pp, is_error ? "error: " : "warning: ", message);
 }
 
+/* Internal error function, called with a png_store but no libpng stuff. */
+static void
+internal_error(png_store *ps, png_const_charp message)
+{
+   store_log(ps, NULL, message, 1 /* error */);
+
+   /* And finally throw an exception. */
+   {
+      struct exception_context *the_exception_context = &ps->exception_context;
+      Throw ps;
+   }
+}
+
 /* Functions to use as PNG callbacks. */
 static void
 store_error(png_structp pp, png_const_charp message) /* PNG_NORETURN */
@@ -1332,7 +1362,21 @@ store_malloc(png_structp pp, png_alloc_size_t cb)
    }
 
    else
-      store_pool_error(pool->store, pp, "out of memory");
+   {
+      /* NOTE: the PNG user malloc function cannot use the png_ptr it is passed
+       * other than to retrieve the allocation pointer!  libpng calls the
+       * store_malloc callback in two basic cases:
+       *
+       * 1) From png_malloc; png_malloc will do a png_error itself if NULL is
+       *    returned.
+       * 2) From png_struct or png_info structure creation; png_malloc is
+       *    to return so cleanup can be performed.
+       *
+       * To handle this store_malloc can log a message, but can't do anything
+       * else.
+       */
+      store_log(pool->store, pp, "out of memory", 1 /* is_error */);
+   }
 
    return new;
 }
@@ -1342,6 +1386,14 @@ store_free(png_structp pp, png_voidp memory)
 {
    store_pool *pool = voidcast(store_pool*, png_get_mem_ptr(pp));
    store_memory *this = voidcast(store_memory*, memory), **test;
+
+   /* Because libpng calls store_free with a dummy png_struct when deleting
+    * png_struct or png_info via png_destroy_struct_2 it is necessary to check
+    * the passed in png_structp to ensure it is valid, and not pass it to
+    * png_error if it is not.
+    */
+   if (pp != pool->store->pread && pp != pool->store->pwrite)
+      pp = NULL;
 
    /* First check that this 'memory' really is valid memory - it must be in the
     * pool list.  If it is, use the shared memory_free function to free it.
@@ -1606,7 +1658,7 @@ static CIE_color
 white_point(PNG_CONST color_encoding *encoding)
 {
    CIE_color white;
-   
+
    white.X = encoding->red.X + encoding->green.X + encoding->blue.X;
    white.Y = encoding->red.Y + encoding->green.Y + encoding->blue.Y;
    white.Z = encoding->red.Z + encoding->green.Z + encoding->blue.Z;
@@ -3205,8 +3257,8 @@ transform_row(png_structp pp, png_byte buffer[TRANSFORM_ROWMAX],
  */
 static void
 make_transform_image(png_store* PNG_CONST ps, png_byte PNG_CONST colour_type,
-    png_byte PNG_CONST bit_depth, int palette_number, int interlace_type,
-    png_const_charp name)
+    png_byte PNG_CONST bit_depth, unsigned int palette_number,
+    int interlace_type, png_const_charp name)
 {
    context(ps, fault);
 
@@ -3333,7 +3385,7 @@ make_transform_images(png_store *ps)
 {
    png_byte colour_type = 0;
    png_byte bit_depth = 0;
-   int palette_number = 0;
+   unsigned int palette_number = 0;
 
    /* This is in case of errors. */
    safecat(ps->test, sizeof ps->test, 0, "make standard images");
@@ -3657,9 +3709,11 @@ static PNG_CONST struct
     };
 
 static void
-make_error(png_store* volatile ps, png_byte PNG_CONST colour_type,
+make_error(png_store* volatile psIn, png_byte PNG_CONST colour_type,
     png_byte bit_depth, int interlace_type, int test, png_const_charp name)
 {
+   png_store * volatile ps = psIn;
+
    context(ps, fault);
 
    Try
@@ -3943,6 +3997,8 @@ standard_display_init(standard_display *dp, png_store* ps, png_uint_32 id,
    dp->ps = ps;
    dp->colour_type = COL_FROM_ID(id);
    dp->bit_depth = DEPTH_FROM_ID(id);
+   if (dp->bit_depth < 1 || dp->bit_depth > 16)
+      internal_error(ps, "internal: bad bit depth");
    if (dp->colour_type == 3)
       dp->red_sBIT = dp->blue_sBIT = dp->green_sBIT = dp->alpha_sBIT = 8;
    else
@@ -4039,7 +4095,7 @@ read_palette(store_palette palette, int *npalette, png_structp pp, png_infop pi)
          png_error(pp, "validate: invalid PLTE result");
       /* But there is no palette, so record this: */
       *npalette = 0;
-      memset(palette, 113, sizeof palette);
+      memset(palette, 113, sizeof (store_palette));
    }
 
    trans_alpha = 0;
@@ -5225,7 +5281,7 @@ static void
 transform_display_init(transform_display *dp, png_modifier *pm, png_uint_32 id,
     PNG_CONST image_transform *transform_list)
 {
-   memset(dp, 0, sizeof dp);
+   memset(dp, 0, sizeof *dp);
 
    /* Standard fields */
    standard_display_init(&dp->this, &pm->this, id, 0/*do_interlace*/,
@@ -5311,8 +5367,12 @@ transform_info_imp(transform_display *dp, png_structp pp, png_infop pi)
          test_pixel.sample_depth = 8;
       else
          test_pixel.sample_depth = test_pixel.bit_depth;
-      /* Don't need sBIT here */
+      /* Don't need sBIT here, but it must be set to non-zero to avoid
+       * arithmetic overflows.
+       */
       test_pixel.have_tRNS = dp->this.is_transparent;
+      test_pixel.red_sBIT = test_pixel.green_sBIT = test_pixel.blue_sBIT =
+         test_pixel.alpha_sBIT = test_pixel.sample_depth;
 
       dp->transform_list->mod(dp->transform_list, &test_pixel, pp, dp);
 
@@ -7010,7 +7070,7 @@ perform_transform_test(png_modifier *pm)
 {
    png_byte colour_type = 0;
    png_byte bit_depth = 0;
-   int palette_number = 0;
+   unsigned int palette_number = 0;
 
    while (next_format(&colour_type, &bit_depth, &palette_number))
    {
@@ -8369,7 +8429,7 @@ perform_gamma_threshold_tests(png_modifier *pm)
 {
    png_byte colour_type = 0;
    png_byte bit_depth = 0;
-   int palette_number = 0;
+   unsigned int palette_number = 0;
 
    /* Don't test more than one instance of each palette - it's pointless, in
     * fact this test is somewhat excessive since libpng doesn't make this
@@ -8434,7 +8494,7 @@ static void perform_gamma_transform_tests(png_modifier *pm)
 {
    png_byte colour_type = 0;
    png_byte bit_depth = 0;
-   int palette_number = 0;
+   unsigned int palette_number = 0;
 
    while (next_format(&colour_type, &bit_depth, &palette_number))
    {
@@ -8463,11 +8523,8 @@ static void perform_gamma_sbit_tests(png_modifier *pm)
     */
    for (sbit=pm->sbitlow; sbit<(1<<READ_BDHI); ++sbit)
    {
-      png_byte colour_type, bit_depth;
-      int npalette;
-
-      colour_type = bit_depth = 0;
-      npalette = 0;
+      png_byte colour_type = 0, bit_depth = 0;
+      unsigned int npalette = 0;
 
       while (next_format(&colour_type, &bit_depth, &npalette))
          if ((colour_type & PNG_COLOR_MASK_ALPHA) == 0 &&
@@ -8683,7 +8740,7 @@ perform_gamma_composition_tests(png_modifier *pm, int do_background,
 {
    png_byte colour_type = 0;
    png_byte bit_depth = 0;
-   int palette_number = 0;
+   unsigned int palette_number = 0;
 
    /* Skip the non-alpha cases - there is no setting of a transparency colour at
     * present.
@@ -9245,8 +9302,74 @@ static PNG_CONST color_encoding test_encodings[] =
 /*blue: */ { 0.146774385252705, 0.016589442011321, 0.773892783545073} },
 };
 
+/* signal handler
+ *
+ * This attempts to trap signals and escape without crashing.  It needs a
+ * context pointer so that it can throw an exception (call longjmp) to recover
+ * from the condition; this is handled by making the png_modifier used by 'main'
+ * into a global variable.
+ */
+static png_modifier pm;
+
+static void signal_handler(int signum)
+{
+
+   size_t pos = 0;
+   char msg[64];
+
+   pos = safecat(msg, sizeof msg, pos, "caught signal: ");
+
+   switch (signum)
+   {
+      case SIGABRT:
+         pos = safecat(msg, sizeof msg, pos, "abort");
+         break;
+
+      case SIGFPE:
+         pos = safecat(msg, sizeof msg, pos, "floating point exception");
+         break;
+
+      case SIGILL:
+         pos = safecat(msg, sizeof msg, pos, "illegal instruction");
+         break;
+
+      case SIGINT:
+         pos = safecat(msg, sizeof msg, pos, "interrupt");
+         break;
+
+      case SIGSEGV:
+         pos = safecat(msg, sizeof msg, pos, "invalid memory access");
+         break;
+
+      case SIGTERM:
+         pos = safecat(msg, sizeof msg, pos, "termination request");
+         break;
+
+      default:
+         pos = safecat(msg, sizeof msg, pos, "unknown ");
+         pos = safecatn(msg, sizeof msg, pos, signum);
+         break;
+   }
+
+   store_log(&pm.this, NULL/*png_structp*/, msg, 1/*error*/);
+
+   /* And finally throw an exception so we can keep going, unless this is
+    * SIGTERM in which case stop now.
+    */
+   if (signum != SIGTERM)
+   {
+      struct exception_context *the_exception_context =
+         &pm.this.exception_context;
+
+      Throw &pm.this;
+   }
+
+   else
+      exit(1);
+}
+
 /* main program */
-int sans_main(int argc, PNG_CONST char **argv)
+int main(int argc, PNG_CONST char **argv)
 {
    volatile int summary = 1;  /* Print the error summary at the end */
    volatile int memstats = 0; /* Print memory statistics at the end */
@@ -9266,8 +9389,23 @@ int sans_main(int argc, PNG_CONST char **argv)
    size_t cp = 0;
    char command[1024];
 
-   png_modifier pm;
-   context(&pm.this, fault);
+   anon_context(&pm.this);
+
+   /* Add appropriate signal handlers, just the ANSI specified ones: */
+   signal(SIGABRT, signal_handler);
+   signal(SIGFPE, signal_handler);
+   signal(SIGILL, signal_handler);
+   signal(SIGINT, signal_handler);
+   signal(SIGSEGV, signal_handler);
+   signal(SIGTERM, signal_handler);
+
+#ifdef HAVE_FEENABLEEXCEPT
+   /* Only required to enable FP exceptions on platforms where they start off
+    * disabled; this is not necessary but if it is not done pngvalid will likely
+    * end up ignoring FP conditions that other platforms fault.
+    */
+   feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
+#endif
 
    modifier_init(&pm);
 
@@ -9613,7 +9751,7 @@ int sans_main(int argc, PNG_CONST char **argv)
 #endif
    }
 
-   Catch(fault)
+   Catch_anonymous
    {
       fprintf(stderr, "pngvalid: test aborted (probably failed in cleanup)\n");
       if (!pm.this.verbose)
