@@ -404,7 +404,7 @@
 #    endif
 #    ifndef PNG_ALLOCATED
 #      if (_MSC_VER >= 1400)
-#        define PNG_ALLOCATED __declspec(PNG_RESTRICT)
+#        define PNG_ALLOCATED 
 #      endif
 #    endif
 #    ifndef PNG_DEPRECATED
