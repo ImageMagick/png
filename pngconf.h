@@ -362,7 +362,7 @@
 #      endif
 #    endif
 #    ifndef PNG_RESTRICT
-#      define PNG_RESTRICT __restrict
+#      define PNG_RESTRICT 
 #    endif
 
 #  elif defined(__GNUC__)
