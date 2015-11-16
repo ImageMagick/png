@@ -2,7 +2,7 @@
  *
  * Copyright (c) 2014-2015 John Cunningham Bowler
  *
- * Last changed in libpng 1.6.17 [March 26, 2015]
+ * Last changed in libpng 1.6.18 [July 23, 2015]
  *
  * This code is released under the libpng license.
  * For conditions of distribution and use, see the disclaimer
@@ -52,7 +52,10 @@
 #ifdef PNG_SETJMP_SUPPORTED
 #include <setjmp.h>
 
-#if defined(PNG_READ_SUPPORTED) && defined(PNG_EASY_ACCESS_SUPPORTED)
+#if defined(PNG_READ_SUPPORTED) && defined(PNG_EASY_ACCESS_SUPPORTED) &&\
+   (defined(PNG_READ_DEINTERLACE_SUPPORTED) ||\
+    defined(PNG_READ_INTERLACING_SUPPORTED))
+
 /* zlib.h defines the structure z_stream, an instance of which is included
  * in this structure and is required for decompressing the LZ compressed
  * data in PNG files.
@@ -71,8 +74,8 @@
  * with older builds.
  */
 #if ZLIB_VERNUM < 0x1260
-#  define PNGZ_MSG_CAST(s) png_constcast(char*,s)
-#  define PNGZ_INPUT_CAST(b) png_constcast(png_bytep,b)
+#  define PNGZ_MSG_CAST(s) constcast(char*,s)
+#  define PNGZ_INPUT_CAST(b) constcast(png_bytep,b)
 #else
 #  define PNGZ_MSG_CAST(s) (s)
 #  define PNGZ_INPUT_CAST(b) (b)
@@ -86,17 +89,17 @@
 
 /* Copied from pngpriv.h */
 #ifdef __cplusplus
-#  define png_voidcast(type, value) static_cast<type>(value)
-#  define png_constcast(type, value) const_cast<type>(value)
-#  define png_aligncast(type, value) \
+#  define voidcast(type, value) static_cast<type>(value)
+#  define constcast(type, value) const_cast<type>(value)
+#  define aligncast(type, value) \
    static_cast<type>(static_cast<void*>(value))
-#  define png_aligncastconst(type, value) \
+#  define aligncastconst(type, value) \
    static_cast<type>(static_cast<const void*>(value))
 #else
-#  define png_voidcast(type, value) (value)
-#  define png_constcast(type, value) ((type)(value))
-#  define png_aligncast(type, value) ((void*)(value))
-#  define png_aligncastconst(type, value) ((const void*)(value))
+#  define voidcast(type, value) (value)
+#  define constcast(type, value) ((type)(value))
+#  define aligncast(type, value) ((void*)(value))
+#  define aligncastconst(type, value) ((const void*)(value))
 #endif /* __cplusplus */
 
 #if PNG_LIBPNG_VER < 10700
@@ -134,7 +137,7 @@
 #define png_zTXt PNG_U32(122,  84,  88, 116)
 #endif
 
-/* The 8 byte signature as a pair of 32 bit quantities */
+/* The 8-byte signature as a pair of 32-bit quantities */
 #define sig1 PNG_U32(137,  80,  78,  71)
 #define sig2 PNG_U32( 13,  10,  26,  10)
 
@@ -156,7 +159,7 @@
  */
 #define UNREACHED 0
 
-/* 80-bit number handling - a PNG image can be up to (2^31-1)x(2^31-1) 8 byte
+/* 80-bit number handling - a PNG image can be up to (2^31-1)x(2^31-1) 8-byte
  * (16-bit RGBA) pixels in size; that's less than 2^65 bytes or 2^68 bits, so
  * arithmetic of 80-bit numbers is sufficient.  This representation uses an
  * arbitrary length array of png_uint_16 digits (0..65535).  The representation
@@ -446,7 +449,7 @@ static void
 make_random_bytes(png_uint_32* seed, void* pv, size_t size)
 {
    png_uint_32 u0 = seed[0], u1 = seed[1];
-   png_bytep bytes = png_voidcast(png_bytep, pv);
+   png_bytep bytes = voidcast(png_bytep, pv);
 
    /* There are thirty-three bits; the next bit in the sequence is bit-33 XOR
     * bit-20.  The top 1 bit is in u1, the bottom 32 are in u0.
@@ -584,7 +587,7 @@ chunk_type_valid(png_uint_32 c)
    c &= ~PNG_U32(32,32,0,32);
    t = (c & ~0x1f1f1f1f) ^ 0x40404040;
 
-   /* Subtract 65 for each 8 bit quantity, this must not overflow
+   /* Subtract 65 for each 8-bit quantity, this must not overflow
     * and each byte must then be in the range 0-25.
     */
    c -= PNG_U32(65,65,65,65);
@@ -667,8 +670,8 @@ IDAT_list_extend(struct IDAT_list *tail)
 
       if (length < tail->length) /* arithmetic overflow */
          length = tail->length;
-            
-      next = png_voidcast(IDAT_list*, malloc(IDAT_list_size(NULL, length)));
+
+      next = voidcast(IDAT_list*, malloc(IDAT_list_size(NULL, length)));
       CLEAR(*next);
 
       /* The caller must handle this: */
@@ -921,7 +924,7 @@ emit_string(const char *str, FILE *out)
 
       else if (isspace(UCHAR_MAX & *str))
          putc('_', out);
-   
+
       else
          fprintf(out, "\\%.3o", *str);
 }
@@ -1945,7 +1948,7 @@ process_IDAT(struct file *file)
       list->count = 0;
       file->idat->idat_list_tail = list;
    }
-   
+
    /* And fill in the next IDAT information buffer. */
    list->lengths[(list->count)++] = file->chunk->chunk_length;
 
@@ -2585,7 +2588,7 @@ zlib_run(struct zlib *zlib)
    {
       struct chunk *chunk = zlib->chunk;
       int rc;
-      
+
       assert(zlib->rewrite_offset < chunk->chunk_length);
 
       rc = zlib_advance(zlib, chunk->chunk_length - zlib->rewrite_offset);
@@ -3535,7 +3538,7 @@ get_control(png_const_structrp png_ptr)
    /* This just returns the (file*).  The chunk and idat control structures
     * don't always exist.
     */
-   struct control *control = png_voidcast(struct control*,
+   struct control *control = voidcast(struct control*,
       png_get_error_ptr(png_ptr));
    return &control->file;
 }
@@ -3543,7 +3546,7 @@ get_control(png_const_structrp png_ptr)
 static void
 allocate(struct file *file, int allocate_idat)
 {
-   struct control *control = png_voidcast(struct control*, file->alloc_ptr);
+   struct control *control = voidcast(struct control*, file->alloc_ptr);
 
    if (allocate_idat)
    {
@@ -3853,6 +3856,7 @@ usage(const char *prog)
 int
 main(int argc, const char **argv)
 {
+   char temp_name[FILENAME_MAX+1];
    const char *  prog = *argv;
    const char *  outfile = NULL;
    const char *  suffix = NULL;
@@ -3955,7 +3959,6 @@ main(int argc, const char **argv)
       else
       {
          size_t outlen = strlen(*argv);
-         char temp_name[FILENAME_MAX+1];
 
          if (outfile == NULL) /* else this takes precedence */
          {
@@ -4030,7 +4033,7 @@ main(void)
 int
 main(void)
 {
-   fprintf(stderr, "pngfix does not work without read support\n");
+   fprintf(stderr, "pngfix does not work without read deinterlace support\n");
    return 77;
 }
 #endif /* PNG_READ_SUPPORTED && PNG_EASY_ACCESS_SUPPORTED */
