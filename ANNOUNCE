@@ -1,4 +1,4 @@
-Libpng 1.6.26 - October 20, 2016
+Libpng 1.6.29 - March 16, 2017
 
 This is a public release of libpng, intended for use in production codes.
 
@@ -7,53 +7,37 @@ Files available for download:
 Source files with LF line endings (for Unix/Linux) and with a
 "configure" script
 
-   libpng-1.6.26.tar.xz (LZMA-compressed, recommended)
-   libpng-1.6.26.tar.gz
+   libpng-1.6.29.tar.xz (LZMA-compressed, recommended)
+   libpng-1.6.29.tar.gz
 
 Source files with CRLF line endings (for Windows), without the
 "configure" script
 
-   lpng1626.7z  (LZMA-compressed, recommended)
-   lpng1626.zip
+   lpng1629.7z  (LZMA-compressed, recommended)
+   lpng1629.zip
 
 Other information:
 
-   libpng-1.6.26-README.txt
-   libpng-1.6.26-LICENSE.txt
-   libpng-1.6.26-*.asc (armored detached GPG signatures)
+   libpng-1.6.29-README.txt
+   libpng-1.6.29-LICENSE.txt
+   libpng-1.6.29-*.asc (armored detached GPG signatures)
 
-Changes since the last public release (1.6.25):
+Changes since the last public release (1.6.28):
 
-  Fixed handling zero length IDAT in pngfix (bug report by Agostino Sarubbo,
-    bugfix by John Bowler).
-  Do not issue a png_error() on read in png_set_pCAL() because png_handle_pCAL
-    has allocated memory that libpng needs to free.
-  Conditionally compile png_set_benign_errors() in pngread.c and pngtest.c
-  Issue a png_benign_error instead of a png_error on ADLER32 mismatch
-    while decoding compressed data chunks.
-  Changed PNG_ZLIB_VERNUM to ZLIB_VERNUM in pngpriv.h, pngstruct.h, and
-    pngrutil.c.
-  If CRC handling of critical chunks has been set to PNG_CRC_QUIET_USE,
-    ignore the ADLER32 checksum in the IDAT chunk as well as the chunk CRCs.
-  Issue png_benign_error() on ADLER32 checksum mismatch instead of png_error().
-  Add tests/badcrc.png and tests/badadler.png to tests/pngtest.
-  Merged pngtest.c with libpng-1.7.0beta84/pngtest.c
-  Updated the documentation about CRC and ADLER32 handling.
-  Quieted 117 warnings from clang-3.8 in pngtrans.c, pngread.c,
-     pngwrite.c, pngunknown.c, and pngvalid.c.
-  Quieted the 144 remaining -Wconversion compiler warnings by
-    revising the png_isaligned() macro and trivial changes in png.c,
-    pngerror.c, pngget.c, pngmem.c, pngset.c, pngrtran.c, pngrutil.c,
-    pngwtran.c, pngwrite.c, and pngwutil.c.
-  Quieted (bogus?) clang warnings about "absolute value has no effect"
-    when PNG_USE_ABS is defined.
-  Fixed offsets in contrib/intel/intel_sse.patch
-  Changed integer constant 4294967294 to unsigned 4294967294U in pngconf.h
-    to avoid a signed/unsigned compare in the preprocessor.
-  Use zlib-1.2.8.1 inflateValidate() instead of inflateReset2() to
-    optionally avoid ADLER32 evaluation.
-  Cosmetic change, "ptr != 0" to "ptr != NULL" in png.c and pngrutil.c
-  Despammed email addresses (replaced "@" with " at ").
+  Readded "include(GNUInstallDirs)" to CMakeLists.txt (Gianfranco Costamagna).
+  Moved SSE2 optimization code into the main libpng source directory.
+    Configure libpng with "configure --enable-intel-sse" or compile
+    libpng with "-DPNG_INTEL_SSE" in CPPFLAGS to enable it.
+  Simplified conditional compilation in pngvalid.c, for AIX (Michael Felt).
+  Avoid conditional directives that break statements in pngrutil.c (Romero
+    Malaquias)
+  The contrib/examples/pngtopng.c recovery code was in the wrong "if"
+    branches; the comments were correct.
+  Added code for PowerPC VSX optimisation (Vadim Barkov).
+  Avoid potential overflow of shift operations in png_do_expand() (Aaron Boxer).
+  Change test ZLIB_VERNUM >= 0x1281 to ZLIB_VERNUM >= 0x1290 in pngrutil.c
+    because Solaris 11 distributes zlib-1.2.8.f that is older than 1.2.8.1.
+  Suppress clang warnings about implicit sign changes in png.c
 
 Send comments/corrections/commendations to png-mng-implement at lists.sf.net
 (subscription required; visit
