@@ -1,6 +1,6 @@
 # CMakeLists.txt
 
-# Copyright (C) 2007,2009-2016 Glenn Randers-Pehrson
+# Copyright (C) 2007,2009-2017 Glenn Randers-Pehrson
 # Written by Christian Ehrlicher, 2007
 # Revised by Roger Lowman, 2009-2010
 # Revised by Clifford Yapp, 2011-2012
@@ -36,7 +36,7 @@ enable_testing()
 
 set(PNGLIB_MAJOR 1)
 set(PNGLIB_MINOR 6)
-set(PNGLIB_RELEASE 29)
+set(PNGLIB_RELEASE 31)
 set(PNGLIB_NAME libpng${PNGLIB_MAJOR}${PNGLIB_MINOR})
 set(PNGLIB_VERSION ${PNGLIB_MAJOR}.${PNGLIB_MINOR}.${PNGLIB_RELEASE})
 
@@ -76,12 +76,16 @@ option(PNG_FRAMEWORK "Build OS X framework" OFF)
 option(PNG_DEBUG     "Build with debug output" OFF)
 option(PNGARG        "Disable ANSI-C prototypes" OFF)
 
+option(PNG_HARDWARE_OPTIMIZATIONS "Enable Hardware Optimizations" ON)
+
+
 set(PNG_PREFIX "" CACHE STRING "Prefix to add to the API function names")
 set(DFA_XTRA "" CACHE FILEPATH "File containing extra configuration settings")
 
+if(PNG_HARDWARE_OPTIMIZATIONS)
 # set definitions and sources for arm
-if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm" OR
-  ${CMAKE_SYSTEM_PROCESSOR} MATCHES "^aarch64")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm" OR
+  CMAKE_SYSTEM_PROCESSOR MATCHES "^aarch64")
   set(PNG_ARM_NEON_POSSIBLE_VALUES check on off)
   set(PNG_ARM_NEON "check" CACHE STRING "Enable ARM NEON optimizations:
      check: (default) use internal checking code;
@@ -110,13 +114,11 @@ if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm" OR
 endif()
 
 # set definitions and sources for powerpc
-if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^powerpc*" OR
-	${CMAKE_SYSTEM_PROCESSOR} MATCHES "^ppc64*" )
-  set(PNG_POWERPC_VSX_POSSIBLE_VALUES check on off)
-  set(PNG_POWERPC_VSX "check" CACHE STRING "Enable POWERPC VSX optimizations:
-     check: (default) use internal checking code;
-     off: disable the optimizations;
-     on: turn on unconditionally.")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^powerpc*" OR
+	CMAKE_SYSTEM_PROCESSOR MATCHES "^ppc64*" )
+  set(PNG_POWERPC_VSX_POSSIBLE_VALUES on off)
+  set(PNG_POWERPC_VSX "on" CACHE STRING "Enable POWERPC VSX optimizations:
+     off: disable the optimizations.")
   set_property(CACHE PNG_POWERPC_VSX PROPERTY STRINGS
      ${PNG_POWERPC_VSX_POSSIBLE_VALUES})
   list(FIND PNG_POWERPC_VSX_POSSIBLE_VALUES ${PNG_POWERPC_VSX} index)
@@ -127,19 +129,62 @@ if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^powerpc*" OR
     set(libpng_powerpc_sources
       powerpc/powerpc_init.c
       powerpc/filter_vsx_intrinsics.c)
-
     if(${PNG_POWERPC_VSX} STREQUAL "on")
       add_definitions(-DPNG_POWERPC_VSX_OPT=2)
-    elseif(${PNG_POWERPC_VSX} STREQUAL "check")
-      add_definitions(-DPNG_POWERPC_VSX_CHECK_SUPPORTED)
-      message(WARNING
-      "[PNG_POWERPC_VSX==check] Please check contrib/powerpc/README file for the list of supported OSes.")
     endif()
   else()
     add_definitions(-DPNG_POWERPC_VSX_OPT=0)
   endif()
 endif()
 
+# set definitions and sources for intel
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^i?86" OR
+	CMAKE_SYSTEM_PROCESSOR MATCHES "^x86_64*" )
+  set(PNG_INTEL_SSE_POSSIBLE_VALUES on off)
+  set(PNG_INTEL_SSE "on" CACHE STRING "Enable INTEL_SSE optimizations:
+     off: disable the optimizations")
+  set_property(CACHE PNG_INTEL_SSE PROPERTY STRINGS
+     ${PNG_INTEL_SSE_POSSIBLE_VALUES})
+  list(FIND PNG_INTEL_SSE_POSSIBLE_VALUES ${PNG_INTEL_SSE} index)
+  if(index EQUAL -1)
+    message(FATAL_ERROR
+      " PNG_INTEL_SSE must be one of [${PNG_INTEL_SSE_POSSIBLE_VALUES}]")
+  elseif(NOT ${PNG_INTEL_SSE} STREQUAL "no")
+    set(libpng_intel_sources
+      intel/intel_init.c
+      intel/filter_sse2_intrinsics.c)
+    if(${PNG_INTEL_SSE} STREQUAL "on")
+      add_definitions(-DPNG_INTEL_SSE_OPT=1)
+    endif()
+  else()
+    add_definitions(-DPNG_INTEL_SSE_OPT=0)
+  endif()
+endif()
+
+# set definitions and sources for MIPS
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "mipsel*" OR
+	CMAKE_SYSTEM_PROCESSOR MATCHES "mips64el*" )
+  set(PNG_MIPS_MSA_POSSIBLE_VALUES on off)
+  set(PNG_MIPS_MSA "on" CACHE STRING "Enable MIPS_MSA optimizations:
+     off: disable the optimizations")
+  set_property(CACHE PNG_MIPS_MSA PROPERTY STRINGS
+     ${PNG_MIPS_MSA_POSSIBLE_VALUES})
+  list(FIND PNG_MIPS_MSA_POSSIBLE_VALUES ${PNG_MIPS_MSA} index)
+  if(index EQUAL -1)
+    message(FATAL_ERROR
+      " PNG_MIPS_MSA must be one of [${PNG_MIPS_MSA_POSSIBLE_VALUES}]")
+  elseif(NOT ${PNG_MIPS_MSA} STREQUAL "no")
+    set(libpng_mips_sources
+      mips/mips_init.c
+      mips/filter_msa_intrinsics.c)
+    if(${PNG_MIPS_MSA} STREQUAL "on")
+      add_definitions(-DPNG_MIPS_MSA_OPT=2)
+    endif()
+  else()
+    add_definitions(-DPNG_MIPS_MSA_OPT=0)
+  endif()
+endif()
+endif(PNG_HARDWARE_OPTIMIZATIONS)
 
 # SET LIBNAME
 set(PNG_LIB_NAME png${PNGLIB_MAJOR}${PNGLIB_MINOR})
@@ -432,6 +477,8 @@ set(libpng_sources
   pngwtran.c
   pngwutil.c
   ${libpng_arm_sources}
+  ${libpng_intel_sources}
+  ${libpng_mips_sources}
   ${libpng_powerpc_sources}
 )
 set(pngtest_sources
@@ -718,7 +765,7 @@ ENDIF(NOT CMAKE_LIBRARY_OUTPUT_DIRECTORY)
 # copies if different.
 macro(CREATE_SYMLINK SRC_FILE DEST_FILE)
   FILE(REMOVE ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${DEST_FILE})
-  if(WIN32 AND NOT CYGWIN AND NOT MSYS)
+  if(CMAKE_HOST_WIN32 AND NOT CYGWIN AND NOT MSYS)
     ADD_CUSTOM_COMMAND(
         OUTPUT ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${DEST_FILE}   ${CMAKE_CURRENT_BINARY_DIR}/${DEST_FILE}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different  "${SRC_FILE}" ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${DEST_FILE}
@@ -726,12 +773,12 @@ macro(CREATE_SYMLINK SRC_FILE DEST_FILE)
         DEPENDS ${PNG_LIB_TARGETS}
         )
     ADD_CUSTOM_TARGET(${DEST_FILE}_COPY ALL DEPENDS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${DEST_FILE})
-  else(WIN32 AND NOT CYGWIN AND NOT MSYS)
+  else(CMAKE_HOST_WIN32 AND NOT CYGWIN AND NOT MSYS)
     get_filename_component(LINK_TARGET "${SRC_FILE}" NAME)
     execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
     execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${LINK_TARGET}" ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${DEST_FILE} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
     execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${LINK_TARGET}" ${DEST_FILE} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-  endif(WIN32 AND NOT CYGWIN AND NOT MSYS)
+  endif(CMAKE_HOST_WIN32 AND NOT CYGWIN AND NOT MSYS)
 endmacro()
 
 # Create source generation scripts.
@@ -770,7 +817,7 @@ endif(NOT WIN32 OR CYGWIN OR MINGW)
 # SET UP LINKS
 if(PNG_SHARED)
   set_target_properties(png PROPERTIES
-#   VERSION 16.${PNGLIB_RELEASE}.1.6.29
+#   VERSION 16.${PNGLIB_RELEASE}.1.6.31
     VERSION 16.${PNGLIB_RELEASE}.0
     SOVERSION 16
     CLEAN_DIRECT_OUTPUT 1)
@@ -846,7 +893,7 @@ if(NOT SKIP_INSTALL_FILES AND NOT SKIP_INSTALL_ALL )
   install(FILES libpng.3 libpngpf.3      DESTINATION ${PNG_MAN_DIR}/man3)
   install(FILES png.5                    DESTINATION ${PNG_MAN_DIR}/man5)
   # Install pkg-config files
-  if(NOT WIN32 OR CYGWIN OR MINGW)
+  if(NOT CMAKE_HOST_WIN32 OR CYGWIN OR MINGW)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libpng.pc
             DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
     install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/libpng-config
@@ -855,7 +902,7 @@ if(NOT SKIP_INSTALL_FILES AND NOT SKIP_INSTALL_ALL )
             DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
     install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/${PNGLIB_NAME}-config
             DESTINATION bin)
-  endif(NOT WIN32 OR CYGWIN OR MINGW)
+  endif(NOT CMAKE_HOST_WIN32 OR CYGWIN OR MINGW)
 endif()
 
 # On versions of CMake that support it, create an export file CMake
