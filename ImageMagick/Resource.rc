@@ -1,7 +1,7 @@
 #include "winver.h"
 
-#define THIS_PROJECT_VERSION_NUM		1,6,31,0
-#define THIS_PROJECT_VERSION_STRING		"1.6.31 (27 July 2017)"
+#define THIS_PROJECT_VERSION_NUM		1,6,32,0
+#define THIS_PROJECT_VERSION_STRING		"1.6.32 (24 August 2017)"
 
 /////////////////////////////////////////////////////////////////////////////
 //
