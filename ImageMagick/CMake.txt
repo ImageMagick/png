@@ -1,0 +1,1 @@
+cmake -DZLIB_INCLUDE_DIR:PATH="../zlib" -DZLIB_LIBRARY:FILEPATH="../zlib/foo.lib" .
