@@ -1,4 +1,4 @@
-[DLL]
+[DYNAMIC_LIBRARY]
 
 [LICENSE]
 LICENSE
@@ -10,23 +10,31 @@ __WIN32__
 __FLAT__
 PNG_NO_MODULEDEF
 
-[DEFINES_DLL]
+[INCLUDE_ARTIFACTS]
+png.h -> .
+pngconf.h -> .
+pnglibconf.h -> .
+
+[DYNAMIC_DEFINES]
 PNG_BUILD_DLL
 
-[DIRECTORIES]
-.
-
-[INCLUDES]
-zlib->.
-
 [EXCLUDES]
+arm\
+contrib\
+intel\
+loongarch\
+mips\
+powerpc\
+projects\
+scripts\
+tests\
 example.c
 pngtest.c
 
-[DEPENDENCIES]
+[REFERENCES]
 zlib
 
-[CONFIG_DEFINE]
+[MAGICK_BASECONFIG_DEFINE]
 /*
   Define to use the PNG library
 */
