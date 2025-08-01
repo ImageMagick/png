@@ -26,6 +26,7 @@ loongarch\
 mips\
 powerpc\
 projects\
+riscv\
 scripts\
 tests\
 example.c
