@@ -1,5 +1,23 @@
 [DYNAMIC_LIBRARY]
 
+[VERSION]
+1.6.50
+
+[RELEASE_DATE]
+2025-07-02
+
+[PRODUCT_NAME]
+libpng
+
+[COMPANY_NAME]
+The PNG Development Group
+
+[URL]
+https://github.com/pnggroup/libpng
+
+[COPYRIGHT]
+Copyright (c) Glenn Randers-Pehrson
+
 [LICENSE_FILE]
 LICENSE
 
